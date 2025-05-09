@@ -1,5 +1,4 @@
 import { JsonRpcProvider, Wallet, Contract, parseUnits, formatUnits, formatEther } from 'ethers';
-import * as ethers from 'ethers';
 import axios from 'axios';
 import dotenv from 'dotenv';
 
@@ -70,18 +69,22 @@ class WalletBot {
 
   async getTokenBalance(tokenAddress) {
     const token = new Contract(tokenAddress, erc20Abi, this.wallet);
-    const balance = await token.balanceOf(this.address); // ethers returns BigNumber
+    const balance = await token.balanceOf(this.address);
     const decimals = await token.decimals();
     const formatted = formatUnits(balance, decimals);
     let symbol;
-    try { symbol = await token.symbol(); } catch { symbol = 'TOKEN'; }
+    try {
+      symbol = await token.symbol();
+    } catch {
+      symbol = 'TOKEN';
+    }
     return { balance, decimals, formatted, symbol };
-  }
   }
 
   async getEthBalance() {
-    const bal = await this.provider.getBalance(this.address);
-    return { balance: bal, formatted: formatEther(bal) };
+    const balance = await this.provider.getBalance(this.address);
+    const formatted = formatEther(balance);
+    return { balance, formatted };
   }
 
   async swapToken(tokenName) {
@@ -92,18 +95,31 @@ class WalletBot {
     if (!router || !methodIdRaw) return;
 
     const { balance, decimals, formatted, symbol } = await this.getTokenBalance(tokenAddr);
-    if (balance.toString() === '0') { console.log(`No ${symbol}`); return; }
+    if (balance.toString() === '0') {
+      console.log(`No ${symbol}`);
+      return;
+    }
 
-    await (new Contract(tokenAddr, erc20Abi, this.wallet))
-      .approve(router, balance, { gasLimit: this.config.gasLimit, gasPrice: this.config.gasPrice })
+    await new Contract(tokenAddr, erc20Abi, this.wallet)
+      .approve(router, balance, {
+        gasLimit: this.config.gasLimit,
+        gasPrice: this.config.gasPrice
+      })
       .then(tx => tx.wait());
 
     const mid = methodIdRaw.replace(/^0x/, '');
-    const amtHex = ethers.BigNumber.from(parseUnits(formatted, decimals)).toHexString().replace(/^0x/, '').padStart(64, '0');
-    const data = '0x' + mid + amtHex;
+    const amtHex = parseUnits(formatted, decimals)
+      .toHexString()
+      .replace(/^0x/, '')
+      .padStart(64, '0');
+    const data = `0x${mid}${amtHex}`;
 
-    await this.wallet.sendTransaction({ to: router, data, gasLimit: this.config.gasLimit, gasPrice: this.config.gasPrice })
-      .then(tx => tx.wait());
+    await this.wallet.sendTransaction({
+      to: router,
+      data,
+      gasLimit: this.config.gasLimit,
+      gasPrice: this.config.gasPrice
+    }).then(tx => tx.wait());
   }
 
   async stakeToken(tokenName) {
@@ -113,18 +129,31 @@ class WalletBot {
     if (!stakeAddr) return;
 
     const { balance, decimals, formatted } = await this.getTokenBalance(tokenAddr);
-    if (balance.toString() === '0') { console.log(`No tokens to stake`); return; }
+    if (balance.toString() === '0') {
+      console.log('No tokens to stake');
+      return;
+    }
 
-    await (new Contract(tokenAddr, erc20Abi, this.wallet))
-      .approve(stakeAddr, balance, { gasLimit: this.config.gasLimit, gasPrice: this.config.gasPrice })
+    await new Contract(tokenAddr, erc20Abi, this.wallet)
+      .approve(stakeAddr, balance, {
+        gasLimit: this.config.gasLimit,
+        gasPrice: this.config.gasPrice
+      })
       .then(tx => tx.wait());
 
     const mid = this.config.methodIds.stake.replace(/^0x/, '');
-    const amtHex = ethers.BigNumber.from(parseUnits(formatted, decimals)).toHexString().replace(/^0x/, '').padStart(64, '0');
-    const data = '0x' + mid + amtHex;
+    const amtHex = parseUnits(formatted, decimals)
+      .toHexString()
+      .replace(/^0x/, '')
+      .padStart(64, '0');
+    const data = `0x${mid}${amtHex}`;
 
-    await this.wallet.sendTransaction({ to: stakeAddr, data, gasLimit: this.config.gasLimit, gasPrice: this.config.gasPrice })
-      .then(tx => tx.wait());
+    await this.wallet.sendTransaction({
+      to: stakeAddr,
+      data,
+      gasLimit: this.config.gasLimit,
+      gasPrice: this.config.gasPrice
+    }).then(tx => tx.wait());
   }
 
   async claimFaucets() {
@@ -140,7 +169,9 @@ class WalletBot {
       try {
         await axios.post(url, { address: this.address });
         console.log(`Claimed ${tok.toUpperCase()}`);
-      } catch(e) { console.error(`Failed ${tok}`); }
+      } catch (e) {
+        console.error(`Failed ${tok}`);
+      }
       await new Promise(r => setTimeout(r, 3000));
     }
   }
@@ -165,12 +196,15 @@ class WalletBot {
 
 (async function main() {
   const privateKeys = getPrivateKeys();
-  if (!privateKeys.length) { console.error('No private keys'); return; }
+  если (!privateKeys.length) {
+    console.error('No private keys');
+    return;
+  }
   for (const pk of privateKeys) {
     const bot = new WalletBot(pk, globalConfig);
     await bot.runBot();
   }
-  const INTERVAL = 24*60*60*1000;
+  const INTERVAL = 24 * 60 * 60 * 1000;
   setInterval(async () => {
     for (const pk of privateKeys) {
       const bot = new WalletBot(pk, globalConfig);
