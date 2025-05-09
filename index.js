@@ -24,10 +24,20 @@ class WalletBot {
     return formatUnits(bal, 18);
   }
 
-  getTokenBalance(symbol) {
-    const token = new Contract(this.config.tokens[symbol], erc20Abi, this.wallet);
-    return token.balanceOf(this.address).then(raw => ethers.BigNumber.from(raw));
+  async getTokenBalance(symbol) {
+  const token = new Contract(this.config.tokens[symbol], erc20Abi, this.wallet);
+  try {
+    const raw = await token.balanceOf(this.address);
+    if (!raw || raw.isZero()) {
+      console.log(`No ${symbol.toUpperCase()} balance available.`);
+      return ethers.BigNumber.from(0); // Return 0 if no balance
+    }
+    return ethers.BigNumber.from(raw);
+  } catch (error) {
+    console.error(`Failed to get balance for ${symbol}:`, error);
+    return ethers.BigNumber.from(0); // Return 0 on error
   }
+}
 
   async claimFaucets() {
     console.log(`\n=== [${this.address.slice(0,6)}...] Claim Faucets ===`);
