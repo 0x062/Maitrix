@@ -1,4 +1,4 @@
-import { ethers } from 'ethers';
+import * as ethers from 'ethers';
 import axios from 'axios';
 import dotenv from 'dotenv';
 
@@ -34,7 +34,7 @@ const globalConfig = {
     stake: '0xa694fc3a'
   },
   gasLimit: 1000000,
-  gasPrice: ethers.utils.parseUnits('0.1', 'gwei')
+  gasPrice: ethers.parseUnits('0.1', 'gwei')
 };
 
 // ABI untuk token ERC20
@@ -74,7 +74,37 @@ class WalletBot {
     this.address = this.wallet.address;
   }
 
-  // ... (methods unchanged: getTokenBalance, getEthBalance, swapToken, stakeToken, checkWalletStatus, claimFaucets, runBot)
+  // Function untuk mendapatkan token balance
+  async getTokenBalance(tokenAddress) {
+    const tokenContract = new ethers.Contract(tokenAddress, erc20Abi, this.wallet);
+    const decimals = await tokenContract.decimals();
+    const balance = await tokenContract.balanceOf(this.wallet.address);
+    let symbol = '';
+    
+    try {
+      symbol = await tokenContract.symbol();
+    } catch (error) {
+      symbol = 'TOKEN';
+    }
+    
+    return {
+      balance,
+      decimals,
+      formatted: ethers.formatUnits(balance, decimals),
+      symbol
+    };
+  }
+  
+  // Function untuk mendapatkan ETH balance
+  async getEthBalance() {
+    const balanceWei = await this.provider.getBalance(this.wallet.address);
+    return {
+      balance: balanceWei,
+      formatted: ethers.formatEther(balanceWei)
+    };
+  }
+  
+  // ... (methods swapToken, stakeToken, checkWalletStatus, claimFaucets, runBot tetap sama, hanya internal utils.formatUnits dan formatEther)
 }
 
 // Main function
