@@ -1,4 +1,4 @@
-import * as ethers from 'ethers';
+import { JsonRpcProvider, Wallet, Contract, parseUnits, formatUnits, formatEther } from 'ethers';
 import axios from 'axios';
 import dotenv from 'dotenv';
 
@@ -34,7 +34,7 @@ const globalConfig = {
     stake: '0xa694fc3a'
   },
   gasLimit: 1000000,
-  gasPrice: ethers.parseUnits('0.1', 'gwei')
+  gasPrice: parseUnits('0.1', 'gwei')
 };
 
 // ABI untuk token ERC20
@@ -49,19 +49,18 @@ const erc20Abi = [
 function getPrivateKeys() {
   const privateKeys = [];
   let index = 1;
-  
+
   while (true) {
     const key = process.env[`PRIVATE_KEY_${index}`];
     if (!key) break;
     privateKeys.push(key);
     index++;
   }
-  
-  // Jika tidak ada private key dengan format di atas, gunakan format lama
+
   if (privateKeys.length === 0 && process.env.PRIVATE_KEY) {
     privateKeys.push(process.env.PRIVATE_KEY);
   }
-  
+
   return privateKeys;
 }
 
@@ -69,59 +68,53 @@ function getPrivateKeys() {
 class WalletBot {
   constructor(privateKey, config) {
     this.config = config;
-    this.provider = new ethers.providers.JsonRpcProvider(config.rpc);
-    this.wallet = new ethers.Wallet(privateKey, this.provider);
+    this.provider = new JsonRpcProvider(config.rpc);
+    this.wallet = new Wallet(privateKey, this.provider);
     this.address = this.wallet.address;
   }
 
-  // Function untuk mendapatkan token balance
   async getTokenBalance(tokenAddress) {
-    const tokenContract = new ethers.Contract(tokenAddress, erc20Abi, this.wallet);
+    const tokenContract = new Contract(tokenAddress, erc20Abi, this.wallet);
     const decimals = await tokenContract.decimals();
-    const balance = await tokenContract.balanceOf(this.wallet.address);
-    let symbol = '';
-    
+    const balance = await tokenContract.balanceOf(this.address);
+    let symbol;
     try {
       symbol = await tokenContract.symbol();
-    } catch (error) {
+    } catch {
       symbol = 'TOKEN';
     }
-    
     return {
       balance,
       decimals,
-      formatted: ethers.formatUnits(balance, decimals),
+      formatted: formatUnits(balance, decimals),
       symbol
     };
   }
-  
-  // Function untuk mendapatkan ETH balance
+
   async getEthBalance() {
-    const balanceWei = await this.provider.getBalance(this.wallet.address);
+    const balanceWei = await this.provider.getBalance(this.address);
     return {
       balance: balanceWei,
-      formatted: ethers.formatEther(balanceWei)
+      formatted: formatEther(balanceWei)
     };
   }
-  
-  // ... (methods swapToken, stakeToken, checkWalletStatus, claimFaucets, runBot tetap sama, hanya internal utils.formatUnits dan formatEther)
+
+  // ... swapToken, stakeToken, checkWalletStatus, claimFaucets, runBot dengan formatUnits/formatEther
 }
 
-// Main function
-targetMain();
-
-async function targetMain() {
+// Entry point
+(async function main() {
   console.log('Starting multi-account swap and stake bot...');
   const privateKeys = getPrivateKeys();
-  if (privateKeys.length === 0) {
+  if (!privateKeys.length) {
     console.error('No private keys found in .env file!');
     return;
   }
   console.log(`Found ${privateKeys.length} accounts to process`);
 
-  for (let i = 0; i < privateKeys.length; i++) {
+  for (const [i, pk] of privateKeys.entries()) {
     console.log(`Processing account ${i+1} of ${privateKeys.length}`);
-    const bot = new WalletBot(privateKeys[i], globalConfig);
+    const bot = new WalletBot(pk, globalConfig);
     await bot.runBot();
   }
 
@@ -129,5 +122,5 @@ async function targetMain() {
 
   const INTERVAL_MS = 24 * 60 * 60 * 1000;
   console.log(`Next execution at: ${new Date(Date.now() + INTERVAL_MS).toLocaleString()}`);
-  setInterval(async () => await targetMain(), INTERVAL_MS);
-}
+  setInterval(async () => await main(), INTERVAL_MS);
+})();
