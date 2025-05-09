@@ -1,21 +1,27 @@
+// index.js
 import fs from 'fs';
 import { ethers } from 'ethers';
 import axios from 'axios';
 import dotenv from 'dotenv';
 dotenv.config();
 
-const { JsonRpcProvider, Wallet, Contract, parseUnits, formatUnits } = ethers;
+// Destructuring core classes dari ethers
+const { JsonRpcProvider, Wallet, Contract } = ethers;
+// Fungsi util di ethers.utils
+const { parseUnits, formatUnits } = ethers.utils;
 
 const erc20Abi = JSON.parse(fs.readFileSync('./erc20Abi.json', 'utf-8'));
-const config = JSON.parse(fs.readFileSync('./config.json', 'utf-8'));
-const wallets = process.env.PRIVATE_KEYS ? process.env.PRIVATE_KEYS.split(',').map(k => k.trim()).filter(Boolean) : [];
+const config   = JSON.parse(fs.readFileSync('./config.json', 'utf-8'));
+const wallets  = process.env.PRIVATE_KEYS
+  ? process.env.PRIVATE_KEYS.split(',').map(k => k.trim()).filter(Boolean)
+  : [];
 
 class WalletBot {
   constructor(privateKey) {
     this.provider = new JsonRpcProvider(config.rpc);
-    this.wallet = new Wallet(privateKey, this.provider);
-    this.address = this.wallet.address;
-    this.config = config;
+    this.wallet   = new Wallet(privateKey, this.provider);
+    this.address  = this.wallet.address;
+    this.config   = config;
   }
 
   async getEthBalance() {
@@ -28,12 +34,12 @@ class WalletBot {
     try {
       const raw = await token.balanceOf(this.address);
       if (!raw || raw.isZero()) {
-        console.log(`No ${symbol.toUpperCase()} balance available.`);
+        console.log(`No ${symbol.toUpperCase()} balance.`);
         return ethers.BigNumber.from("0");
       }
       return ethers.BigNumber.from(raw.toString());
-    } catch (error) {
-      console.error(`Failed to get balance for ${symbol}:`, error);
+    } catch (e) {
+      console.error(`Failed to get ${symbol}:`, e.message);
       return ethers.BigNumber.from("0");
     }
   }
@@ -45,7 +51,7 @@ class WalletBot {
         const res = await axios.post(url, { address: this.address });
         console.log(`Claim ${name.toUpperCase()}: HTTP ${res.status}`);
       } catch (e) {
-        console.log(`Claim ${name.toUpperCase()}: Failed. Error: ${e.message}`);
+        console.log(`Claim ${name.toUpperCase()}: Failed (${e.message})`);
       }
     }
   }
@@ -60,25 +66,25 @@ class WalletBot {
           if (bal.isZero()) throw new Error('ZERO_BALANCE');
           return Promise.all([bal, token.decimals()]);
         })
-        .then(([bal, dec]) => {
-          return token.approve(router, bal, { gasLimit: this.config.gasLimit, gasPrice: this.config.gasPrice })
-            .then(tx => tx.wait())
-            .then(() => {
-              const mid  = this.config.methodIds[`${name}Swap`].slice(2);
-              const amt  = bal.toHexString().slice(2).padStart(64, '0');
-              const data = '0x' + mid + amt;
-              return this.wallet.sendTransaction({ to: router, data, gasLimit: this.config.gasLimit, gasPrice: this.config.gasPrice });
-            })
-            .then(tx => tx.wait())
-            .then(() => {
-              console.log(`Swapped ${formatUnits(bal, dec)} ${name.toUpperCase()}`);
-            });
-        })
+        .then(([bal, dec]) => token.approve(router, bal, {
+            gasLimit: this.config.gasLimit,
+            gasPrice: this.config.gasPrice
+          })
+          .then(tx => tx.wait())
+          .then(() => {
+            const mid  = this.config.methodIds[`${name}Swap`].slice(2);
+            const amt  = bal.toHexString().slice(2).padStart(64, '0');
+            const data = '0x' + mid + amt;
+            return this.wallet.sendTransaction({ to: router, data, gasLimit: this.config.gasLimit, gasPrice: this.config.gasPrice });
+          })
+          .then(tx => tx.wait())
+          .then(() => console.log(`Swapped ${formatUnits(bal, dec)} ${name.toUpperCase()}`))
+        )
         .catch(err => {
           if (err.message === 'ZERO_BALANCE') {
             console.log(`No ${name.toUpperCase()}`);
           } else {
-            console.error(`Error swapping ${name.toUpperCase()}:`, err.message);
+            console.error(`Swap ${name.toUpperCase()} error:`, err.message);
           }
         });
     }
@@ -94,44 +100,58 @@ class WalletBot {
           if (bal.isZero()) throw new Error('ZERO_BALANCE');
           return Promise.all([bal, token.decimals()]);
         })
-        .then(([bal, dec]) => {
-          return token.approve(stakeAddr, bal, { gasLimit: this.config.gasLimit, gasPrice: this.config.gasPrice })
-            .then(tx => tx.wait())
-            .then(() => {
-              const mid  = this.config.methodIds.stake.slice(2);
-              const amt  = bal.toHexString().slice(2).padStart(64, '0');
-              const data = '0x' + mid + amt;
-              return this.wallet.sendTransaction({ to: stakeAddr, data, gasLimit: this.config.gasLimit, gasPrice: this.config.gasPrice });
-            })
-            .then(tx => tx.wait())
-            .then(() => {
-              console.log(`Staked ${formatUnits(bal, dec)} ${name.toUpperCase()}`);
-            });
-        })
+        .then(([bal, dec]) => token.approve(stakeAddr, bal, {
+            gasLimit: this.config.gasLimit,
+            gasPrice: this.config.gasPrice
+          })
+          .then(tx => tx.wait())
+          .then(() => {
+            const mid  = this.config.methodIds.stake.slice(2);
+            const amt  = bal.toHexString().slice(2).padStart(64, '0');
+            const data = '0x' + mid + amt;
+            return this.wallet.sendTransaction({ to: stakeAddr, data, gasLimit: this.config.gasLimit, gasPrice: this.config.gasPrice });
+          })
+          .then(tx => tx.wait())
+          .then(() => console.log(`Staked ${formatUnits(bal, dec)} ${name.toUpperCase()}`))
+        )
         .catch(err => {
           if (err.message === 'ZERO_BALANCE') {
             console.log(`No ${name.toUpperCase()} to stake`);
           } else {
-            console.error(`Error staking ${name.toUpperCase()}:`, err.message);
+            console.error(`Stake ${name.toUpperCase()} error:`, err.message);
           }
         });
     }
   }
 
   async run() {
-    // … isi run …
-  }               // ← tutup method run
-}                 // ← tutup class WalletBot
+    // 1) Tampilkan ETH + setiap token balance
+    const ethBal = await this.getEthBalance();
+    console.log(`\nETH: ${ethBal}`);
+    for (const symbol of Object.keys(this.config.tokens)) {
+      const bal = await this.getTokenBalance(symbol);
+      const dec = await new Contract(this.config.tokens[symbol], erc20Abi, this.wallet).decimals();
+      console.log(`${symbol.toUpperCase()}: ${formatUnits(bal, dec)}`);
+    }
 
+    // 2) Claim faucets
+    await this.claimFaucets();
+
+    // 3) Swap & stake
+    this.swapTokens();
+    this.stakeTokens();
+  }
+}
+
+// IIFE untuk menjalankan bot
 (async () => {
   if (!wallets.length) {
     console.error('No wallets in wallets.json');
     return;
-  }               // ← tutup blok if
+  }
 
-  // jalankan bot untuk tiap private key
   for (const pk of wallets) {
     const bot = new WalletBot(pk);
     await bot.run();
   }
-})();               // ← tutup IIFE: '})()'
+})();
