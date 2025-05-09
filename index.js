@@ -1,4 +1,3 @@
-// index.js
 import fs from 'fs';
 import { ethers } from 'ethers';
 import axios from 'axios';
@@ -9,7 +8,7 @@ const { JsonRpcProvider, Wallet, Contract, parseUnits, formatUnits } = ethers;
 
 const erc20Abi = JSON.parse(fs.readFileSync('./erc20Abi.json', 'utf-8'));
 const config = JSON.parse(fs.readFileSync('./config.json', 'utf-8'));
-const wallets = process.env.PRIVATE_KEYS.split(',').map(k => k.trim()).filter(Boolean);
+const wallets = process.env.PRIVATE_KEYS ? process.env.PRIVATE_KEYS.split(',').map(k => k.trim()).filter(Boolean) : [];
 
 class WalletBot {
   constructor(privateKey) {
@@ -25,19 +24,19 @@ class WalletBot {
   }
 
   async getTokenBalance(symbol) {
-  const token = new Contract(this.config.tokens[symbol], erc20Abi, this.wallet);
-  try {
-    const raw = await token.balanceOf(this.address);
-    if (!raw || raw.isZero()) {
-      console.log(`No ${symbol.toUpperCase()} balance available.`);
-      return ethers.BigNumber.from(0); // Return 0 if no balance
+    const token = new Contract(this.config.tokens[symbol], erc20Abi, this.wallet);
+    try {
+      const raw = await token.balanceOf(this.address);
+      if (!raw || raw.isZero()) {
+        console.log(`No ${symbol.toUpperCase()} balance available.`);
+        return ethers.BigNumber.from("0");
+      }
+      return ethers.BigNumber.from(raw.toString());
+    } catch (error) {
+      console.error(`Failed to get balance for ${symbol}:`, error);
+      return ethers.BigNumber.from("0");
     }
-    return ethers.BigNumber.from(raw);
-  } catch (error) {
-    console.error(`Failed to get balance for ${symbol}:`, error);
-    return ethers.BigNumber.from(0); // Return 0 on error
   }
-}
 
   async claimFaucets() {
     console.log(`\n=== [${this.address.slice(0,6)}...] Claim Faucets ===`);
@@ -46,7 +45,7 @@ class WalletBot {
         const res = await axios.post(url, { address: this.address });
         console.log(`Claim ${name.toUpperCase()}: HTTP ${res.status}`);
       } catch (e) {
-        console.log(`Claim ${name.toUpperCase()}: Failed`);
+        console.log(`Claim ${name.toUpperCase()}: Failed. Error: ${e.message}`);
       }
     }
   }
@@ -135,12 +134,3 @@ class WalletBot {
 
 (async () => {
   if (!wallets.length) {
-    console.error('No wallets in wallets.json');
-    return;
-  }
-
-  for (const pk of wallets) {
-    const bot = new WalletBot(pk);
-    await bot.run();
-  }
-})();
