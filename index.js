@@ -99,16 +99,38 @@ class WalletBot {
   }
 
   // Swap token jika balance > 0
-  async swapTokens() {
-    for(const [name, router] of Object.entries(this.config.routers)) {
+    async swapTokens() {
+    for (const [name, router] of Object.entries(this.config.routers)) {
       console.log(`
 === [${this.address.slice(0,6)}...] Swap ${name.toUpperCase()} ===`);
       const tokenAddr = this.config.tokens[name];
       const token = new Contract(tokenAddr, erc20Abi, this.wallet);
-      const balRaw = await token.balanceOf(this.address);
-      const bal = BigNumber.from(balRaw);
+      const raw = await token.balanceOf(this.address);
+      const bal = BigNumber.from(raw);
       const dec = await token.decimals();
-      if(bal.isZero()) { console.log(`No ${name.toUpperCase()}`); continue; }
+
+      if (bal.isZero()) {
+        console.log(`No ${name.toUpperCase()}`);
+        continue;
+      }
+
+      token.approve(router, bal, { gasLimit: this.config.gasLimit, gasPrice: this.config.gasPrice })
+        .then(tx => tx.wait())
+        .then(() => {
+          const mid = this.config.methodIds[`${name}Swap`].slice(2);
+          const amt = bal.toHexString().slice(2).padStart(64, '0');
+          const data = '0x' + mid + amt;
+          return this.wallet.sendTransaction({ to: router, data, gasLimit: this.config.gasLimit, gasPrice: this.config.gasPrice });
+        })
+        .then(tx => tx.wait())
+        .then(() => {
+          console.log(`Swapped ${formatUnits(bal, dec)} ${name.toUpperCase()}`);
+        })
+        .catch(err => {
+          console.error(`Error swapping ${name.toUpperCase()}:`, err.message);
+        });
+    }
+  }
       await token.approve(router, bal, { gasLimit: this.config.gasLimit, gasPrice: this.config.gasPrice });
       const mid = this.config.methodIds[`${name}Swap`].slice(2);
       const amt = bal.toHexString().slice(2).padStart(64,'0');
@@ -127,16 +149,38 @@ class WalletBot {
   }
 
   // Stake token jika balance > 0
-  async stakeTokens() {
-    for(const [name, stakeAddr] of Object.entries(this.config.stakeContracts)) {
+    async stakeTokens() {
+    for (const [name, stakeAddr] of Object.entries(this.config.stakeContracts)) {
       console.log(`
 === [${this.address.slice(0,6)}...] Stake ${name.toUpperCase()} ===`);
       const tokenAddr = this.config.tokens[name];
       const token = new Contract(tokenAddr, erc20Abi, this.wallet);
-      const balRaw = await token.balanceOf(this.address);
-      const bal = BigNumber.from(balRaw);
+      const raw = await token.balanceOf(this.address);
+      const bal = BigNumber.from(raw);
       const dec = await token.decimals();
-      if(bal.isZero()) { console.log(`No ${name.toUpperCase()} to stake`); continue; }
+
+      if (bal.isZero()) {
+        console.log(`No ${name.toUpperCase()} to stake`);
+        continue;
+      }
+
+      token.approve(stakeAddr, bal, { gasLimit: this.config.gasLimit, gasPrice: this.config.gasPrice })
+        .then(tx => tx.wait())
+        .then(() => {
+          const mid = this.config.methodIds.stake.slice(2);
+          const amt = bal.toHexString().slice(2).padStart(64, '0');
+          const data = '0x' + mid + amt;
+          return this.wallet.sendTransaction({ to: stakeAddr, data, gasLimit: this.config.gasLimit, gasPrice: this.config.gasPrice });
+        })
+        .then(tx => tx.wait())
+        .then(() => {
+          console.log(`Staked ${formatUnits(bal, dec)} ${name.toUpperCase()}`);
+        })
+        .catch(err => {
+          console.error(`Error staking ${name.toUpperCase()}:`, err.message);
+        });
+    }
+  }
       await token.approve(stakeAddr, bal, { gasLimit: this.config.gasLimit, gasPrice: this.config.gasPrice });
       const mid = this.config.methodIds.stake.slice(2);
       const amt = bal.toHexString().slice(2).padStart(64,'0');
