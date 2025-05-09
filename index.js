@@ -9,7 +9,7 @@ const { JsonRpcProvider, Wallet, Contract, parseUnits, formatUnits } = ethers;
 
 const erc20Abi = JSON.parse(fs.readFileSync('./erc20Abi.json', 'utf-8'));
 const config = JSON.parse(fs.readFileSync('./config.json', 'utf-8'));
-const wallets = JSON.parse(fs.readFileSync('./wallets.json', 'utf-8'));
+const wallets = process.env.PRIVATE_KEYS.split(',').map(k => k.trim()).filter(Boolean);
 
 class WalletBot {
   constructor(privateKey) {
