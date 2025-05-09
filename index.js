@@ -119,18 +119,19 @@ class WalletBot {
   }
 
   async run() {
-    const ethBal = await this.getEthBalance();
-    console.log(`\nETH: ${ethBal}`);
-    for (const symbol of Object.keys(this.config.tokens)) {
-      const bal = await this.getTokenBalance(symbol);
-      const dec = await new Contract(this.config.tokens[symbol], erc20Abi, this.wallet).decimals();
-      console.log(`${symbol.toUpperCase()}: ${formatUnits(bal, dec)}`);
-    }
-    await this.claimFaucets();
-    this.swapTokens();
-    this.stakeTokens();
-  }
-}
+    // … isi run …
+  }               // ← tutup method run
+}                 // ← tutup class WalletBot
 
 (async () => {
   if (!wallets.length) {
+    console.error('No wallets in wallets.json');
+    return;
+  }               // ← tutup blok if
+
+  // jalankan bot untuk tiap private key
+  for (const pk of wallets) {
+    const bot = new WalletBot(pk);
+    await bot.run();
+  }
+})();               // ← tutup IIFE: '})()'
