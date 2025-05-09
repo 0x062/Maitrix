@@ -1,4 +1,5 @@
-import { JsonRpcProvider, Wallet, Contract, parseUnits, formatUnits, formatEther, BigNumber } from 'ethers';
+import { JsonRpcProvider, Wallet, Contract, parseUnits, formatUnits, formatEther } from 'ethers';
+import * as ethers from 'ethers';
 import axios from 'axios';
 import dotenv from 'dotenv';
 
@@ -18,7 +19,7 @@ const globalConfig = {
     vana: '0xBEbF4E25652e7F23CCdCCcaaCB32004501c4BfF8'
   },
   routers: {
-    virtual: '0x3dCACa90A714498624067948624067948C092Dd0373f08265',
+    virtual: '0x3dCACa90A714498624067948C092Dd0373f08265',
     ath: '0x2cFDeE1d5f04dD235AEA47E1aD2fB66E3A61C13e'
   },
   stakeContracts: {
@@ -69,9 +70,8 @@ class WalletBot {
 
   async getTokenBalance(tokenAddress) {
     const token = new Contract(tokenAddress, erc20Abi, this.wallet);
-    // fetch raw and force BigNumber
     const raw = await token.balanceOf(this.address);
-    const balance = BigNumber.from(raw);
+    const balance = ethers.BigNumber.from(raw);
     const decimals = await token.decimals();
     const formatted = formatUnits(balance, decimals);
     let symbol;
@@ -94,14 +94,12 @@ class WalletBot {
     const { balance, decimals, formatted, symbol } = await this.getTokenBalance(tokenAddr);
     if (balance.toString() === '0') { console.log(`No ${symbol}`); return; }
 
-    // approve full balance
     await (new Contract(tokenAddr, erc20Abi, this.wallet))
       .approve(router, balance, { gasLimit: this.config.gasLimit, gasPrice: this.config.gasPrice })
       .then(tx => tx.wait());
 
-    // build data: strip 0x, pad amount, add 0x prefix
     const mid = methodIdRaw.replace(/^0x/, '');
-    const amtHex = parseUnits(formatted, decimals).toHexString().replace(/^0x/, '').padStart(64, '0');
+    const amtHex = ethers.BigNumber.from(parseUnits(formatted, decimals)).toHexString().replace(/^0x/, '').padStart(64, '0');
     const data = '0x' + mid + amtHex;
 
     await this.wallet.sendTransaction({ to: router, data, gasLimit: this.config.gasLimit, gasPrice: this.config.gasPrice })
@@ -114,7 +112,7 @@ class WalletBot {
     const stakeAddr = this.config.stakeContracts[tokenName];
     if (!stakeAddr) return;
 
-    const { balance, formatted } = await this.getTokenBalance(tokenAddr);
+    const { balance, decimals, formatted } = await this.getTokenBalance(tokenAddr);
     if (balance.toString() === '0') { console.log(`No tokens to stake`); return; }
 
     await (new Contract(tokenAddr, erc20Abi, this.wallet))
@@ -122,7 +120,7 @@ class WalletBot {
       .then(tx => tx.wait());
 
     const mid = this.config.methodIds.stake.replace(/^0x/, '');
-    const amtHex = parseUnits(formatted, formatted.decimals).toHexString().replace(/^0x/, '').padStart(64, '0');
+    const amtHex = ethers.BigNumber.from(parseUnits(formatted, decimals)).toHexString().replace(/^0x/, '').padStart(64, '0');
     const data = '0x' + mid + amtHex;
 
     await this.wallet.sendTransaction({ to: stakeAddr, data, gasLimit: this.config.gasLimit, gasPrice: this.config.gasPrice })
