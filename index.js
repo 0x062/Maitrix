@@ -196,7 +196,7 @@ class WalletBot {
 
 (async function main() {
   const privateKeys = getPrivateKeys();
-  если (!privateKeys.length) {
+  if (!privateKeys.length) {
     console.error('No private keys');
     return;
   }
@@ -206,6 +206,11 @@ class WalletBot {
   }
   const INTERVAL = 24 * 60 * 60 * 1000;
   setInterval(async () => {
+    for (const pk of privateKeys) {
+      const bot = new WalletBot(pk, globalConfig);
+      await bot.runBot();
+    }
+  }, INTERVAL);(async () => {
     for (const pk of privateKeys) {
       const bot = new WalletBot(pk, globalConfig);
       await bot.runBot();
