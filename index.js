@@ -70,13 +70,13 @@ class WalletBot {
 
   async getTokenBalance(tokenAddress) {
     const token = new Contract(tokenAddress, erc20Abi, this.wallet);
-    const raw = await token.balanceOf(this.address);
-    const balance = ethers.BigNumber.from(raw);
+    const balance = await token.balanceOf(this.address); // ethers returns BigNumber
     const decimals = await token.decimals();
     const formatted = formatUnits(balance, decimals);
     let symbol;
     try { symbol = await token.symbol(); } catch { symbol = 'TOKEN'; }
     return { balance, decimals, formatted, symbol };
+  }
   }
 
   async getEthBalance() {
