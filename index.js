@@ -1,4 +1,6 @@
 // index.js
+import fs from 'fs';
+const erc20Abi = JSON.parse(fs.readFileSync('./erc20Abi.json', 'utf-8'));
 import { ethers } from 'ethers';
 import axios from 'axios';
 import dotenv from 'dotenv';
