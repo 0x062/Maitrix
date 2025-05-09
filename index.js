@@ -45,26 +45,21 @@ const erc20Abi = [
   'function symbol() view returns (string)'
 ];
 
-// Daftar private key dari file .env
 function getPrivateKeys() {
-  const privateKeys = [];
-  let index = 1;
-
+  const keys = [];
+  let i = 1;
   while (true) {
-    const key = process.env[`PRIVATE_KEY_${index}`];
+    const key = process.env[`PRIVATE_KEY_${i}`];
     if (!key) break;
-    privateKeys.push(key);
-    index++;
+    keys.push(key);
+    i++;
   }
-
-  if (privateKeys.length === 0 && process.env.PRIVATE_KEY) {
-    privateKeys.push(process.env.PRIVATE_KEY);
+  if (!keys.length && process.env.PRIVATE_KEY) {
+    keys.push(process.env.PRIVATE_KEY);
   }
-
-  return privateKeys;
+  return keys;
 }
 
-// Kelas WalletBot
 class WalletBot {
   constructor(privateKey, config) {
     this.config = config;
@@ -74,53 +69,105 @@ class WalletBot {
   }
 
   async getTokenBalance(tokenAddress) {
-    const tokenContract = new Contract(tokenAddress, erc20Abi, this.wallet);
-    const decimals = await tokenContract.decimals();
-    const balance = await tokenContract.balanceOf(this.address);
+    const token = new Contract(tokenAddress, erc20Abi, this.wallet);
+    const decimals = await token.decimals();
+    const balance = await token.balanceOf(this.address);
     let symbol;
-    try {
-      symbol = await tokenContract.symbol();
-    } catch {
-      symbol = 'TOKEN';
-    }
-    return {
-      balance,
-      decimals,
-      formatted: formatUnits(balance, decimals),
-      symbol
-    };
+    try { symbol = await token.symbol(); } catch { symbol = 'TOKEN'; }
+    return { balance, decimals, formatted: formatUnits(balance, decimals), symbol };
   }
 
   async getEthBalance() {
-    const balanceWei = await this.provider.getBalance(this.address);
-    return {
-      balance: balanceWei,
-      formatted: formatEther(balanceWei)
-    };
+    const balance = await this.provider.getBalance(this.address);
+    return { balance, formatted: formatEther(balance) };
   }
 
-  // ... swapToken, stakeToken, checkWalletStatus, claimFaucets, runBot dengan formatUnits/formatEther
+  async swapToken(tokenName) {
+    console.log(`\n=== [${this.address.slice(0,6)}...] Swap ${tokenName.toUpperCase()} ===`);
+    const tokenAddr = this.config.tokens[tokenName];
+    const router = this.config.routers[tokenName];
+    const methodId = this.config.methodIds[`${tokenName}Swap`];
+    if (!router || !methodId) return;
+
+    const { balance, formatted, symbol } = await this.getTokenBalance(tokenAddr);
+    if (balance.isZero()) { console.log(`No ${symbol}`); return; }
+    const { formatted: ethBal } = await this.getEthBalance();
+
+    await (new Contract(tokenAddr, erc20Abi, this.wallet))
+      .approve(router, balance, { gasLimit: this.config.gasLimit, gasPrice: this.config.gasPrice })
+      .then(tx => tx.wait());
+
+    const data = methodId + parseUnits(balance.toString()).toString(16).padStart(64, '0');
+    await this.wallet.sendTransaction({ to: router, data, gasLimit: this.config.gasLimit, gasPrice: this.config.gasPrice })
+      .then(tx => tx.wait());
+  }
+
+  async stakeToken(tokenName) {
+    console.log(`\n=== [${this.address.slice(0,6)}...] Stake ${tokenName.toUpperCase()} ===`);
+    const tokenAddr = this.config.tokens[tokenName];
+    const stakeAddr = this.config.stakeContracts[tokenName];
+    if (!stakeAddr) return;
+
+    const { balance } = await this.getTokenBalance(tokenAddr);
+    if (balance.isZero()) { console.log(`No tokens to stake`); return; }
+
+    await (new Contract(tokenAddr, erc20Abi, this.wallet))
+      .approve(stakeAddr, balance, { gasLimit: this.config.gasLimit, gasPrice: this.config.gasPrice })
+      .then(tx => tx.wait());
+
+    const data = this.config.methodIds.stake + parseUnits(balance.toString()).toString(16).padStart(64, '0');
+    await this.wallet.sendTransaction({ to: stakeAddr, data, gasLimit: this.config.gasLimit, gasPrice: this.config.gasPrice })
+      .then(tx => tx.wait());
+  }
+
+  async claimFaucets() {
+    console.log(`\n=== [${this.address.slice(0,6)}...] Claim Faucets ===`);
+    const endpoints = {
+      ath: 'https://app.x-network.io/maitrix-faucet/faucet',
+      usde: 'https://app.x-network.io/maitrix-usde/faucet',
+      lvlusd: 'https://app.x-network.io/maitrix-lvl/faucet',
+      virtual: 'https://app.x-network.io/maitrix-virtual/faucet',
+      vana: 'https://app.x-network.io/maitrix-vana/faucet'
+    };
+    for (const [tok, url] of Object.entries(endpoints)) {
+      try {
+        await axios.post(url, { address: this.address });
+        console.log(`Claimed ${tok.toUpperCase()}`);
+      } catch(e) { console.error(`Failed ${tok}`); }
+      await new Promise(r => setTimeout(r, 3000));
+    }
+  }
+
+  async checkWalletStatus() {
+    const { formatted: eth } = await this.getEthBalance();
+    console.log(`ETH: ${eth}`);
+    for (const name of Object.keys(this.config.tokens)) {
+      const { formatted, symbol } = await this.getTokenBalance(this.config.tokens[name]);
+      console.log(`${symbol}: ${formatted}`);
+    }
+  }
+
+  async runBot() {
+    await this.checkWalletStatus();
+    await this.claimFaucets();
+    for (const t of Object.keys(this.config.routers)) await this.swapToken(t);
+    for (const t of Object.keys(this.config.stakeContracts)) await this.stakeToken(t);
+    await this.checkWalletStatus();
+  }
 }
 
-// Entry point
 (async function main() {
-  console.log('Starting multi-account swap and stake bot...');
   const privateKeys = getPrivateKeys();
-  if (!privateKeys.length) {
-    console.error('No private keys found in .env file!');
-    return;
-  }
-  console.log(`Found ${privateKeys.length} accounts to process`);
-
-  for (const [i, pk] of privateKeys.entries()) {
-    console.log(`Processing account ${i+1} of ${privateKeys.length}`);
+  if (!privateKeys.length) { console.error('No private keys'); return; }
+  for (const pk of privateKeys) {
     const bot = new WalletBot(pk, globalConfig);
     await bot.runBot();
   }
-
-  console.log('All accounts processed successfully!');
-
-  const INTERVAL_MS = 24 * 60 * 60 * 1000;
-  console.log(`Next execution at: ${new Date(Date.now() + INTERVAL_MS).toLocaleString()}`);
-  setInterval(async () => await main(), INTERVAL_MS);
+  const INTERVAL = 24*60*60*1000;
+  setInterval(async () => {
+    for (const pk of privateKeys) {
+      const bot = new WalletBot(pk, globalConfig);
+      await bot.runBot();
+    }
+  }, INTERVAL);
 })();
