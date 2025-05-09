@@ -26,7 +26,7 @@ const globalConfig = {
     usde: '0x07f8ec2B79B7A1998Fd0B21a4668B0Cf1cA72C02',
     lvlusd: '0x5De3fBd40D4c3892914c3b67b5B529D776A1483A',
     vusd: '0x5bb9Fa02a3DCCDB4E9099b48e8Ba5841D2e59d51',
-    vnusd: '0x46a6585a0Ad1750d37B4e6810EB59cBDf591Dc30'
+    vana: '0x46a6585a0Ad1750d37B4e6810EB59cBDf591Dc30'
   },
   methodIds: {
     virtualSwap: '0xa6d67510',
@@ -38,7 +38,7 @@ const globalConfig = {
 };
 
 const erc20Abi = [
-  'function balanceOf(address owner) view returns (uint256 balance)',
+  'function balanceOf(address owner) view returns (uint256)',
   'function decimals() view returns (uint8)',
   'function approve(address spender, uint256 amount) returns (bool)',
   'function symbol() view returns (string)'
@@ -47,15 +47,13 @@ const erc20Abi = [
 function getPrivateKeys() {
   const keys = [];
   let i = 1;
-  while (true) {
+  while(true) {
     const key = process.env[`PRIVATE_KEY_${i}`];
-    if (!key) break;
+    if(!key) break;
     keys.push(key);
     i++;
   }
-  if (!keys.length && process.env.PRIVATE_KEY) {
-    keys.push(process.env.PRIVATE_KEY);
-  }
+  if(!keys.length && process.env.PRIVATE_KEY) keys.push(process.env.PRIVATE_KEY);
   return keys;
 }
 
@@ -67,95 +65,19 @@ class WalletBot {
     this.address = this.wallet.address;
   }
 
-  async getTokenBalance(tokenAddress) {
-    const token = new Contract(tokenAddress, erc20Abi, this.wallet);
-    const balance = await token.balanceOf(this.address);
-    const decimals = await token.decimals();
-    const formatted = formatUnits(balance, decimals);
-    let symbol;
-    try {
-      symbol = await token.symbol();
-    } catch {
-      symbol = 'TOKEN';
+  // Lihat status ETH dan token
+  async checkWalletStatus() {
+    const ethBal = formatEther(await this.provider.getBalance(this.address));
+    console.log(`ETH: ${ethBal}`);
+    for(const [name, addr] of Object.entries(this.config.tokens)) {
+      const token = new Contract(addr, erc20Abi, this.wallet);
+      const bal = await token.balanceOf(this.address);
+      const decimals = await token.decimals();
+      console.log(`${name.toUpperCase()}: ${formatUnits(bal, decimals)}`);
     }
-    return { balance, decimals, formatted, symbol };
   }
 
-  async getEthBalance() {
-    const balance = await this.provider.getBalance(this.address);
-    const formatted = formatEther(balance);
-    return { balance, formatted };
-  }
-
-  async swapToken(tokenName) {
-    console.log(`\n=== [${this.address.slice(0,6)}...] Swap ${tokenName.toUpperCase()} ===`);
-    const tokenAddr = this.config.tokens[tokenName];
-    const router = this.config.routers[tokenName];
-    const methodIdRaw = this.config.methodIds[`${tokenName}Swap`];
-    if (!router || !methodIdRaw) return;
-
-    const { balance, decimals, formatted, symbol } = await this.getTokenBalance(tokenAddr);
-    if (balance.toString() === '0') {
-      console.log(`No ${symbol}`);
-      return;
-    }
-
-    await new Contract(tokenAddr, erc20Abi, this.wallet)
-      .approve(router, balance, {
-        gasLimit: this.config.gasLimit,
-        gasPrice: this.config.gasPrice
-      })
-      .then(tx => tx.wait());
-
-    const mid = methodIdRaw.replace(/^0x/, '');
-    const amtHex = parseUnits(formatted, decimals)
-      .toHexString()
-      .replace(/^0x/, '')
-      .padStart(64, '0');
-    const data = `0x${mid}${amtHex}`;
-
-    await this.wallet.sendTransaction({
-      to: router,
-      data,
-      gasLimit: this.config.gasLimit,
-      gasPrice: this.config.gasPrice
-    }).then(tx => tx.wait());
-  }
-
-  async stakeToken(tokenName) {
-    console.log(`\n=== [${this.address.slice(0,6)}...] Stake ${tokenName.toUpperCase()} ===`);
-    const tokenAddr = this.config.tokens[tokenName];
-    const stakeAddr = this.config.stakeContracts[tokenName];
-    if (!stakeAddr) return;
-
-    const { balance, decimals, formatted } = await this.getTokenBalance(tokenAddr);
-    if (balance.toString() === '0') {
-      console.log('No tokens to stake');
-      return;
-    }
-
-    await new Contract(tokenAddr, erc20Abi, this.wallet)
-      .approve(stakeAddr, balance, {
-        gasLimit: this.config.gasLimit,
-        gasPrice: this.config.gasPrice
-      })
-      .then(tx => tx.wait());
-
-    const mid = this.config.methodIds.stake.replace(/^0x/, '');
-    const amtHex = parseUnits(formatted, decimals)
-      .toHexString()
-      .replace(/^0x/, '')
-      .padStart(64, '0');
-    const data = `0x${mid}${amtHex}`;
-
-    await this.wallet.sendTransaction({
-      to: stakeAddr,
-      data,
-      gasLimit: this.config.gasLimit,
-      gasPrice: this.config.gasPrice
-    }).then(tx => tx.wait());
-  }
-
+  // Claim faucets dengan respon log
   async claimFaucets() {
     console.log(`\n=== [${this.address.slice(0,6)}...] Claim Faucets ===`);
     const endpoints = {
@@ -165,55 +87,75 @@ class WalletBot {
       virtual: 'https://app.x-network.io/maitrix-virtual/faucet',
       vana: 'https://app.x-network.io/maitrix-vana/faucet'
     };
-    for (const [tok, url] of Object.entries(endpoints)) {
+    for(const [tok, url] of Object.entries(endpoints)) {
       try {
-        await axios.post(url, { address: this.address });
-        console.log(`Claimed ${tok.toUpperCase()}`);
-      } catch (e) {
-        console.error(`Failed ${tok}`);
+        const res = await axios.post(url, { address: this.address });
+        console.log(`Claim ${tok.toUpperCase()}: HTTP ${res.status}`);
+      } catch(err) {
+        console.error(`Claim ${tok.toUpperCase()} failed: ${err.message}`);
       }
       await new Promise(r => setTimeout(r, 3000));
     }
   }
 
-  async checkWalletStatus() {
-    const { formatted: eth } = await this.getEthBalance();
-    console.log(`ETH: ${eth}`);
-    for (const name of Object.keys(this.config.tokens)) {
-      const { formatted, symbol } = await this.getTokenBalance(this.config.tokens[name]);
-      console.log(`${symbol}: ${formatted}`);
+  // Swap token jika balance > 0
+  async swapTokens() {
+    for(const [name, router] of Object.entries(this.config.routers)) {
+      console.log(`\n=== [${this.address.slice(0,6)}...] Swap ${name.toUpperCase()} ===`);
+      const tokenAddr = this.config.tokens[name];
+      const token = new Contract(tokenAddr, erc20Abi, this.wallet);
+      const bal = await token.balanceOf(this.address);
+      const dec = await token.decimals();
+      if(bal.isZero()) { console.log(`No ${name.toUpperCase()}`); continue; }
+      await token.approve(router, bal, { gasLimit: this.config.gasLimit, gasPrice: this.config.gasPrice });
+      const mid = this.config.methodIds[`${name}Swap`].slice(2);
+      const amt = bal.toHexString().slice(2).padStart(64,'0');
+      const data = '0x'+mid+amt;
+      await this.wallet.sendTransaction({ to: router, data, gasLimit: this.config.gasLimit, gasPrice: this.config.gasPrice });
+      console.log(`Swapped ${formatUnits(bal,dec)} ${name.toUpperCase()}`);
     }
   }
 
-  async runBot() {
+  // Stake token jika balance > 0
+  async stakeTokens() {
+    for(const [name, stakeAddr] of Object.entries(this.config.stakeContracts)) {
+      console.log(`\n=== [${this.address.slice(0,6)}...] Stake ${name.toUpperCase()} ===`);
+      const tokenAddr = this.config.tokens[name];
+      const token = new Contract(tokenAddr, erc20Abi, this.wallet);
+      const bal = await token.balanceOf(this.address);
+      const dec = await token.decimals();
+      if(bal.isZero()) { console.log(`No ${name.toUpperCase()} to stake`); continue; }
+      await token.approve(stakeAddr, bal, { gasLimit: this.config.gasLimit, gasPrice: this.config.gasPrice });
+      const mid = this.config.methodIds.stake.slice(2);
+      const amt = bal.toHexString().slice(2).padStart(64,'0');
+      const data = '0x'+mid+amt;
+      await this.wallet.sendTransaction({ to: stakeAddr, data, gasLimit: this.config.gasLimit, gasPrice: this.config.gasPrice });
+      console.log(`Staked ${formatUnits(bal,dec)} ${name.toUpperCase()}`);
+    }
+  }
+
+  // Jalankan seluruh flow
+  async run() {
     await this.checkWalletStatus();
     await this.claimFaucets();
-    for (const t of Object.keys(this.config.routers)) await this.swapToken(t);
-    for (const t of Object.keys(this.config.stakeContracts)) await this.stakeToken(t);
+    await this.swapTokens();
+    await this.stakeTokens();
     await this.checkWalletStatus();
   }
 }
 
-(async function main() {
-  const privateKeys = getPrivateKeys();
-  if (!privateKeys.length) {
-    console.error('No private keys');
-    return;
+(async()=>{
+  const keys = getPrivateKeys();
+  if(!keys.length) return console.error('No private keys');
+  for(const k of keys) {
+    const bot = new WalletBot(k, globalConfig);
+    await bot.run();
   }
-  for (const pk of privateKeys) {
-    const bot = new WalletBot(pk, globalConfig);
-    await bot.runBot();
-  }
-  const INTERVAL = 24 * 60 * 60 * 1000;
-  setInterval(async () => {
-    for (const pk of privateKeys) {
-      const bot = new WalletBot(pk, globalConfig);
-      await bot.runBot();
+  const interval = 24*60*60*1000;
+  setInterval(async()=>{
+    for(const k of keys) {
+      const bot = new WalletBot(k, globalConfig);
+      await bot.run();
     }
-  }, INTERVAL);(async () => {
-    for (const pk of privateKeys) {
-      const bot = new WalletBot(pk, globalConfig);
-      await bot.runBot();
-    }
-  }, INTERVAL);
+  }, interval);
 })();
