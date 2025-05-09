@@ -7,7 +7,7 @@ dotenv.config();
 
 const { JsonRpcProvider, Wallet, Contract, parseUnits, formatUnits } = ethers;
 
-import erc20Abi from './erc20Abi.json' assert { type: 'json' };
+const erc20Abi = JSON.parse(fs.readFileSync('./erc20Abi.json', 'utf-8'));
 import config from './config.json' assert { type: 'json' };
 import wallets from './wallets.json' assert { type: 'json' };
 
