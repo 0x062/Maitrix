@@ -8,7 +8,7 @@ dotenv.config();
 const { JsonRpcProvider, Wallet, Contract, parseUnits, formatUnits } = ethers;
 
 const erc20Abi = JSON.parse(fs.readFileSync('./erc20Abi.json', 'utf-8'));
-import config from './config.json' assert { type: 'json' };
+const config = JSON.parse(fs.readFileSync('./config.json', 'utf-8'));
 import wallets from './wallets.json' assert { type: 'json' };
 
 class WalletBot {
