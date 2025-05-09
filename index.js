@@ -1,20 +1,19 @@
-// index.js
 import fs from 'fs';
 import { ethers } from 'ethers';
 import axios from 'axios';
 import dotenv from 'dotenv';
 dotenv.config();
 
-// Destructuring core classes dari ethers
-const { JsonRpcProvider, Wallet, Contract } = ethers;
-// Fungsi util di ethers.utils
-const { parseUnits, formatUnits } = ethers.utils;
+// Di v6, parseUnits/formatUnits berada langsung di ethers
+const { JsonRpcProvider, Wallet, Contract, parseUnits, formatUnits } = ethers;
 
 const erc20Abi = JSON.parse(fs.readFileSync('./erc20Abi.json', 'utf-8'));
 const config   = JSON.parse(fs.readFileSync('./config.json', 'utf-8'));
 const wallets  = process.env.PRIVATE_KEYS
   ? process.env.PRIVATE_KEYS.split(',').map(k => k.trim()).filter(Boolean)
   : [];
+
+// … lanjutkan kode seperti biasa …
 
 class WalletBot {
   constructor(privateKey) {
