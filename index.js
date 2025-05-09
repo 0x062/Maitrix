@@ -164,18 +164,20 @@ class WalletBot {
   }
 }
 
-(async()=>{
+(async () => {
   const keys = getPrivateKeys();
-  if(!keys.length) return console.error('No private keys');
-  for(const k of keys) {
+  if (!keys.length) return console.error('No private keys');
+  // jalankan pertama kali dengan await di dalam async
+  for (const k of keys) {
     const bot = new WalletBot(k, globalConfig);
     await bot.run();
   }
-  const interval = 24*60*60*1000;
-  setInterval(async()=>{
-    for(const k of keys) {
+  const interval = 24 * 60 * 60 * 1000;
+  // setInterval tidak async, jadi jalankan tanpa await
+  setInterval(() => {
+    for (const k of keys) {
       const bot = new WalletBot(k, globalConfig);
-      await bot.run();
+      bot.run().catch(err => console.error(err));
     }
   }, interval);
 })();
